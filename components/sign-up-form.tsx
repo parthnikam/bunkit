@@ -31,10 +31,12 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
     setError(null)
 
     try {
+      const siteURL = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=/c`,
+          redirectTo: `${siteURL}/auth/callback?next=/c`,
         },
       })
       if (error) throw error
@@ -57,11 +59,12 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
     }
 
     try {
+      const siteURL = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/c`,
+          emailRedirectTo: `${siteURL}/auth/confirm?next=/c`,
         },
       })
       if (error) throw error

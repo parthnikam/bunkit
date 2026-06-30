@@ -30,10 +30,12 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
     setError(null)
 
     try {
+      const siteURL = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=/c`,
+          redirectTo: `${siteURL}/auth/callback?next=/c`,
         },
       })
       if (error) throw error
