@@ -1,22 +1,18 @@
-import { redirect } from 'next/navigation'
-
-import { LogoutButton } from '@/components/logout-button'
+import { TodayDashboard } from '@/components/home/today-dashboard'
 import { createClient } from '@/lib/server'
+import { getCurrentSemesterData } from '@/lib/server/current-semester'
 
 export default async function ProtectedPage() {
   const supabase = await createClient()
-
-  const { data, error } = await supabase.auth.getClaims()
-  if (error || !data?.claims) {
-    redirect('/auth/login')
-  }
+  const { data } = await supabase.auth.getClaims()
+  const semesterData = await getCurrentSemesterData()
 
   return (
-    <div className="flex h-svh w-full items-center justify-center gap-2">
-      <p>
-        Hello <span>{data.claims.email}</span>
-      </p>
-      <LogoutButton />
-    </div>
+    <TodayDashboard
+      email={data?.claims?.email}
+      initialAbsences={semesterData.absences}
+      initialSettings={semesterData.settings}
+      initialSubjects={semesterData.subjects}
+    />
   )
 }

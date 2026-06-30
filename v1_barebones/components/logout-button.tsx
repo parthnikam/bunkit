@@ -1,11 +1,14 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import type { ComponentProps } from 'react'
 
 import { createClient } from '@/lib/client'
 import { Button } from '@/components/ui/button'
 
-export function LogoutButton() {
+type LogoutButtonProps = ComponentProps<typeof Button>
+
+export function LogoutButton({ children = 'Logout', ...props }: LogoutButtonProps) {
   const router = useRouter()
 
   const logout = async () => {
@@ -14,5 +17,9 @@ export function LogoutButton() {
     router.push('/auth/login')
   }
 
-  return <Button onClick={logout}>Logout</Button>
+  return (
+    <Button onClick={logout} {...props}>
+      {children}
+    </Button>
+  )
 }

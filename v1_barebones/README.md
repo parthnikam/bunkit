@@ -17,7 +17,7 @@ BUNK is an attendance planner for students who need to track classes, plan absen
 
 
 ## Database Schema
-
+`
 Tables: 
 TIMETABLE: id: int8, creator: uuid of user, sem1, sem2, sem3 ... sem8: (json object)
 
@@ -34,7 +34,7 @@ timetable {
     friday []
 }
 absences {date string "yyyymmdd": [classes missed (class name string)], ...}
-
+`
 
 ## Main Screens
 
@@ -163,75 +163,3 @@ Saved data includes:
 
 Storage implementations:
 
-- Web: saves to browser `localStorage`.
-- Desktop/mobile IO platforms: saves a JSON file in the user's app data, local app data, home directory, or current directory depending on platform environment.
-- Stub: fallback store for unsupported platforms.
-
-
-The default timetable covers Monday through Friday and includes theory classes and lab blocks.
-
-## Project Structure
-
-```text
-lib/
-  main.dart                         App entry point and theme
-  data/seed_data.dart               Default subjects and timetable
-  logic/attendance_engine.dart      Attendance prediction and planning logic
-  models/attendance_models.dart     Core app models
-  screens/home_screen.dart          State owner and tab navigation
-  screens/today_screen.dart         Daily dashboard
-  screens/subjects_screen.dart      Subject skip budget
-  screens/calendar_screen.dart      Absence calendar
-  screens/planner_screen.dart       What-if leave planner
-  screens/settings_screen.dart      Semester, holiday, and timetable settings
-  storage/                          Local persistence implementations
-  utils/date_utils.dart             Date and time formatting helpers
-  widgets/                          Shared UI components and safety styling
-```
-
-## Running The App
-
-Install dependencies:
-
-```bash
-flutter pub get
-```
-
-Run on the connected device or emulator:
-
-```bash
-flutter run
-```
-
-Run in Chrome:
-
-```bash
-flutter run -d chrome
-```
-
-Analyze the project:
-
-```bash
-dart analyze
-```
-
-Run tests:
-
-```bash
-flutter test
-```
-
-## Tech Stack
-
-- Flutter
-- Dart
-- Material 3
-- Local JSON persistence
-- Browser localStorage for web builds
-
-## Current App Identity
-
-- App title: `Bunk Budget`
-- Visible header: `BUNK`
-- Theme: dark interface with orange safety/action accents
-- Primary user flow: check today's classes, mark attendance, plan absences, and tune the timetable as the semester changes
