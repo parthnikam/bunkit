@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache'
 
 import { createClient } from '@/lib/server'
-import type { AppSettings, DateKey } from '@/lib/models/attendance'
+import type { AppSettings, AttendanceMarks, DateKey, PlannedAbsences, SubjectRecord } from '@/lib/models/attendance'
+import { withSemesterMetricsForSubjects } from '@/lib/logic/semester-metrics'
 import type { SemesterColumn } from '@/lib/models/semester'
 
 export type SavedSemesterSettings = {
@@ -14,7 +15,9 @@ export type SavedSemesterSettings = {
   holidays: DateKey[]
   holiday_ranges: { start: DateKey; end: DateKey }[]
   timetable: AppSettings['timetable']
-  absences: Record<string, string[]>
+  absences: PlannedAbsences
+  marks?: AttendanceMarks
+  subjects?: SubjectRecord[]
 }
 
 export async function saveSemesterSettings(
@@ -32,7 +35,7 @@ export async function saveSemesterSettings(
     const { data: existing, error: lookupError } = await supabase
       .from('TIMETABLE')
       .select(`id, ${semester}`)
-      .eq('creator', userData.user.id)
+      .eq('user_id', userData.user.id)
       .maybeSingle()
 
     if (lookupError) {
@@ -40,13 +43,48 @@ export async function saveSemesterSettings(
     }
 
     const row = existing as ({ id: unknown } & Record<string, unknown>) | null
-    const existingSemester = (row?.[semester] ?? {}) as { absences?: Record<string, string[]> }
+    const existingSemester = (row?.[semester] ?? {}) as {
+      absences?: PlannedAbsences
+      marks?: AttendanceMarks
+      subjects?: SubjectRecord[]
+    }
+    const appSettings: AppSettings = {
+      semesterStart: settings.start_date,
+      semesterEnd: settings.end_date,
+      minimumAttendance: settings.minimum_attendance,
+      recommendedAttendance: settings.recommended_attendance,
+      holidays: settings.holidays,
+      holidayRanges: settings.holiday_ranges,
+      timetable: settings.timetable,
+    }
+    const existingSubjects = existingSemester.subjects ?? settings.subjects ?? []
+    const subjectNames = new Set<string>()
+
+    for (const slots of Object.values(settings.timetable)) {
+      for (const slot of slots ?? []) {
+        subjectNames.add(slot.subject)
+      }
+    }
+
+    const subjectsWithDefaults = Array.from(subjectNames)
+      .sort()
+      .map(
+        (name) =>
+          existingSubjects.find((subject) => subject.name === name) ?? {
+            name,
+            attended: 0,
+            missed: 0,
+          }
+      )
+
     const payload = {
-      creator: userData.user.id,
+      user_id: userData.user.id,
       current_sem: semester,
       [semester]: {
         ...settings,
         absences: existingSemester.absences ?? settings.absences,
+        marks: existingSemester.marks ?? settings.marks ?? {},
+        subjects: withSemesterMetricsForSubjects(subjectsWithDefaults, appSettings),
       },
     }
 

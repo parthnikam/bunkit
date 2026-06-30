@@ -94,7 +94,13 @@ export function SettingsForm({ initialSemester, initialSettings }: SettingsFormP
   const [holidays, setHolidays] = useState<string[]>(
     initialSettings.holidays?.map(dateKeyToInput) ?? []
   )
-  const [holidayRanges, setHolidayRanges] = useState<HolidayRange[]>([])
+  const [holidayRanges, setHolidayRanges] = useState<HolidayRange[]>(() =>
+    (initialSettings.holidayRanges ?? []).map((range, index) => ({
+      id: `range-${index}`,
+      start: dateKeyToInput(range.start),
+      end: dateKeyToInput(range.end),
+    }))
+  )
   const [slots, setSlots] = useState<EditableSlot[]>(() =>
     weekdays.flatMap((weekday) =>
       (initialSettings.timetable[weekday] ?? []).map((slot, index) => ({
@@ -200,6 +206,8 @@ export function SettingsForm({ initialSemester, initialSettings }: SettingsFormP
         return timetable
       }, {}),
       absences: {},
+      marks: {},
+      subjects: [],
     }
 
     const result = await saveSemesterSettings(semester, settings)

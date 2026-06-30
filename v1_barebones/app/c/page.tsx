@@ -9,8 +9,10 @@ export default async function ProtectedPage() {
 
   return (
     <TodayDashboard
+      currentSemester={semesterData.currentSemester}
       email={data?.claims?.email}
       initialAbsences={semesterData.absences}
+      initialMarks={semesterData.marks}
       initialSettings={semesterData.settings}
       initialSubjects={semesterData.subjects}
     />

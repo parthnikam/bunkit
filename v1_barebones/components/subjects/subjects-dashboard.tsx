@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronDown, CircleAlert, Target } from 'lucide-react'
+import { CircleAlert, Target } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import {
@@ -10,8 +10,12 @@ import {
 import {
   attendance,
   held,
-  skipsLeft,
 } from '@/lib/logic/subject-calculations'
+import {
+  remainingSkipsForSemester,
+  semesterClassCounts,
+  withSemesterMetrics,
+} from '@/lib/logic/semester-metrics'
 import type { AppSettings, PlannedAbsences, SubjectRecord } from '@/lib/models/attendance'
 
 type SubjectsDashboardProps = {
@@ -19,8 +23,6 @@ type SubjectsDashboardProps = {
   initialAbsences: PlannedAbsences
   settings: AppSettings
 }
-
-const targets = [60, 65, 70, 75, 80, 85, 90]
 
 function formatNumber(value: number) {
   if (value === Number.POSITIVE_INFINITY) {
@@ -57,15 +59,20 @@ export function SubjectsDashboard({
   settings,
 }: SubjectsDashboardProps) {
   const [selectedSubject, setSelectedSubject] = useState(initialSubjects[0]?.name ?? '')
-  const [target, setTarget] = useState(settings.recommendedAttendance)
 
   const plannedCounts = useMemo(() => plannedMissCounts(initialAbsences), [initialAbsences])
   const projectedSubjects = useMemo(
-    () => predictedSubjects(initialSubjects, initialAbsences),
-    [initialAbsences, initialSubjects]
+    () => {
+      const classCounts = semesterClassCounts(settings)
+
+      return predictedSubjects(initialSubjects, initialAbsences).map((subject) =>
+        withSemesterMetrics(subject, settings, classCounts)
+      )
+    },
+    [initialAbsences, initialSubjects, settings]
   )
   const selected = projectedSubjects.find((subject) => subject.name === selectedSubject)
-  const selectedSkips = selected ? skipsLeft(selected, target) : 0
+  const selectedSkips = selected?.remainingSkips ?? 0
 
   return (
     <div className="space-y-4 px-4 py-4 sm:px-6 md:py-6">
@@ -74,21 +81,9 @@ export function SubjectsDashboard({
           <p className="text-sm text-muted-foreground">Attendance budget</p>
           <h1 className="text-xl font-semibold tracking-tight">Bunks</h1>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border px-2 py-1.5">
+        <div className="flex items-center gap-2 rounded-lg border px-2 py-1.5 text-sm">
           <Target className="size-4 text-muted-foreground" />
-          <select
-            aria-label="Target attendance"
-            className="bg-transparent text-sm font-medium outline-none"
-            onChange={(event) => setTarget(Number(event.target.value))}
-            value={target}
-          >
-            {targets.map((item) => (
-              <option key={item} value={item}>
-                {item}%
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="size-3 text-muted-foreground" />
+          <span className="font-medium">{settings.minimumAttendance}% min</span>
         </div>
       </header>
 
@@ -100,7 +95,7 @@ export function SubjectsDashboard({
             return (
               <button
                 className={[
-                  'h-8 w-[172px] rounded-lg border px-3 text-left text-sm transition-colors',
+                  'h-8 rounded-lg border px-3 text-sm transition-colors',
                   selected
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-border bg-background hover:bg-muted',
@@ -121,7 +116,7 @@ export function SubjectsDashboard({
           <div className="min-w-0">
             <p className="truncate font-medium">{selected.name}</p>
             <p className="text-xs text-muted-foreground">
-              {formatNumber(selectedSkips)} skips left at {target}%
+              {formatNumber(selectedSkips)} skips left at {settings.minimumAttendance}% minimum
             </p>
           </div>
           <div className="text-sm">{attendance(selected).toFixed(1)}%</div>
@@ -132,54 +127,70 @@ export function SubjectsDashboard({
       ) : null}
 
       <section className="overflow-x-auto">
-        <div className="space-y-2">
-          <div className="grid min-w-[720px] grid-cols-[1fr_86px_110px_110px_110px_92px] gap-2 border-b pb-2 text-xs text-muted-foreground">
-            <span>Subject</span>
-            <span>Percent</span>
-            <span>Missed</span>
-            <span>Skips left</span>
-            <span>Planned</span>
-            <span>Status</span>
-          </div>
+        <table className="w-full min-w-[760px] table-fixed border-separate border-spacing-y-2 text-sm">
+          <thead>
+            <tr className="text-xs text-muted-foreground">
+              <th className="w-[22%] border-b px-2 pb-2 text-left font-normal">Subject</th>
+              <th className="border-b px-2 pb-2 text-right font-normal">Percent</th>
+              <th className="border-b px-2 pb-2 text-right font-normal">Total</th>
+              <th className="border-b px-2 pb-2 text-right font-normal">Missed</th>
+              <th className="border-b px-2 pb-2 text-right font-normal">Left</th>
+              <th className="border-b px-2 pb-2 text-right font-normal">Planned</th>
+              <th className="border-b px-2 pb-2 text-center font-normal">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {projectedSubjects.map((subject) => {
+              const percent = attendance(subject)
+              const minimum = subject.minimumTarget ?? settings.minimumAttendance
+              const recommended = subject.safetyTarget ?? settings.recommendedAttendance
+              const status = statusFor(percent, minimum, recommended)
+              const plannedMisses = plannedCounts[subject.name] ?? 0
 
-          {projectedSubjects.map((subject) => {
-            const percent = attendance(subject)
-            const minimum = subject.minimumTarget ?? settings.minimumAttendance
-            const recommended = subject.safetyTarget ?? settings.recommendedAttendance
-            const status = statusFor(percent, minimum, recommended)
-            const plannedMisses = plannedCounts[subject.name] ?? 0
-
-            return (
-              <button
-                className={[
-                  'grid min-w-[720px] grid-cols-[1fr_86px_110px_110px_110px_92px] items-center gap-2 rounded-lg border px-2 py-2 text-left text-sm transition-colors hover:bg-muted/60',
-                  selectedSubject === subject.name ? 'border-primary' : 'border-border',
-                ].join(' ')}
-                key={subject.name}
-                onClick={() => setSelectedSubject(subject.name)}
-                type="button"
-              >
-                <span className="font-medium">{subject.name}</span>
-                <span>{percent.toFixed(1)}%</span>
-                <span className="text-muted-foreground">
-                  {subject.missed}/{held(subject)}
-                </span>
-                <span>{formatNumber(skipsLeft(subject, target))}</span>
-                <span className="text-muted-foreground">{plannedMisses}</span>
-                <span className={`w-fit rounded-full border px-2 py-0.5 text-xs ${status.className}`}>
-                  {status.label}
-                </span>
-              </button>
-            )
-          })}
-        </div>
+              return (
+                <tr
+                  className={[
+                    'cursor-pointer transition-colors hover:bg-muted/60 [&>td]:border-y [&>td]:border-border [&>td]:px-2 [&>td]:py-2',
+                    '[&>td:first-child]:rounded-l-lg [&>td:first-child]:border-l',
+                    '[&>td:last-child]:rounded-r-lg [&>td:last-child]:border-r',
+                    selectedSubject === subject.name ? '[&>td]:border-primary' : '',
+                  ].join(' ')}
+                  key={subject.name}
+                  onClick={() => setSelectedSubject(subject.name)}
+                >
+                  <td className="font-medium">{subject.name}</td>
+                  <td className="text-right">{percent.toFixed(1)}%</td>
+                  <td className="text-right text-muted-foreground">{subject.totalClasses ?? 0}</td>
+                  <td className="text-right text-muted-foreground">
+                    {subject.missed}/{held(subject)}
+                  </td>
+                  <td className="text-right">
+                    {formatNumber(
+                      remainingSkipsForSemester(
+                        subject.missed,
+                        subject.totalClasses ?? 0,
+                        settings.minimumAttendance
+                      )
+                    )}
+                  </td>
+                  <td className="text-right text-muted-foreground">{plannedMisses}</td>
+                  <td className="text-center">
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs ${status.className}`}>
+                      {status.label}
+                    </span>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </section>
 
       <section className="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs text-muted-foreground">
         <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
         <p>
-          Percentages include planned misses. Change the target to see how many more classes each
-          subject can absorb.
+          Percentages include planned misses. Remaining skips use total semester classes and the
+          minimum attendance rule.
         </p>
       </section>
     </div>

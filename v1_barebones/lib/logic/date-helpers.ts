@@ -61,7 +61,13 @@ export function isWithinSemester(date: Date, settings: AppSettings): boolean {
 }
 
 export function isHoliday(date: Date, settings: AppSettings): boolean {
-  return settings.holidays?.includes(toDateKey(date)) ?? false
+  const dateKey = toDateKey(date)
+  const isSingleHoliday = settings.holidays?.includes(dateKey) ?? false
+  const isRangeHoliday =
+    settings.holidayRanges?.some((range) => dateKey >= range.start && dateKey <= range.end) ??
+    false
+
+  return isSingleHoliday || isRangeHoliday
 }
 
 export function addDays(date: Date, days: number): Date {

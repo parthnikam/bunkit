@@ -22,6 +22,9 @@ export type SubjectRecord = {
   name: string
   attended: number
   missed: number
+  attendancePercentage?: number
+  remainingSkips?: number
+  totalClasses?: number
   professor?: string
   minimumTarget?: number
   safetyTarget?: number
@@ -53,6 +56,7 @@ export type AppSettings = {
   minimumAttendance: number
   recommendedAttendance: number
   holidays?: DateKey[]
+  holidayRanges?: { start: DateKey; end: DateKey }[]
   timetable: WeeklyTimetable
 }
 
@@ -74,6 +78,9 @@ export type DaySafetyResult = {
   status: DaySafety
   unsafeSubjects: string[]
   partialSubjects: string[]
+  subjectImpacts: PlannerSubjectImpact[]
+  unsafeSubjectImpacts: PlannerSubjectImpact[]
+  partialSubjectImpacts: PlannerSubjectImpact[]
 }
 
 export type BestSkipDay = {

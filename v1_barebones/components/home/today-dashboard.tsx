@@ -1,10 +1,15 @@
 'use client'
 
 import { CalendarDays, Check, Clock, LogOut, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { syncCurrentSemesterSnapshot } from '@/app/c/actions'
 import { LogoutButton } from '@/components/logout-button'
 import { Button } from '@/components/ui/button'
+import {
+  saveSemesterDataCache,
+  semesterCacheFromState,
+} from '@/lib/client/semester-cache'
 import {
   activeClassFor,
   classesFor,
@@ -17,22 +22,25 @@ import { addDays, dateKeyToDate } from '@/lib/logic/date-helpers'
 import { attendance, held } from '@/lib/logic/subject-calculations'
 import type {
   AppSettings,
+  AttendanceMarks,
   DateKey,
   DaySafety,
   PlannedAbsences,
+  PlannerSubjectImpact,
   SessionStatus,
   SubjectRecord,
   TimetableSlot,
 } from '@/lib/models/attendance'
+import type { SemesterColumn } from '@/lib/models/semester'
 
 type TodayDashboardProps = {
+  currentSemester: SemesterColumn
   email?: string
   initialSubjects: SubjectRecord[]
   initialSettings: AppSettings
   initialAbsences: PlannedAbsences
+  initialMarks: AttendanceMarks
 }
-
-type LocalMark = Record<string, SessionStatus>
 
 const statusText: Record<DaySafety, string> = {
   safe: 'Safe',
@@ -108,6 +116,25 @@ function safetyMessage(status: DaySafety, slots: TimetableSlot[], subjects: stri
   return 'No classes scheduled today.'
 }
 
+function UnsafeSubjectImpacts({ subjects }: { subjects: PlannerSubjectImpact[] }) {
+  if (subjects.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="space-y-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+      {subjects.map((subject) => (
+        <div className="flex items-center justify-between gap-3" key={subject.subject}>
+          <span className="min-w-0 truncate font-medium">{subject.subject}</span>
+          <span className="shrink-0 tabular-nums">
+            {subject.beforeAttendance.toFixed(1)}% {'->'} {subject.afterAttendance.toFixed(1)}%
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function applyMark(subject: SubjectRecord, previous?: SessionStatus, next?: SessionStatus) {
   let attended = subject.attended
   let missed = subject.missed
@@ -136,20 +163,24 @@ function applyMark(subject: SubjectRecord, previous?: SessionStatus, next?: Sess
 }
 
 export function TodayDashboard({
+  currentSemester,
   email,
   initialSubjects,
   initialSettings,
   initialAbsences,
+  initialMarks,
 }: TodayDashboardProps) {
   const [selectedDateKey, setSelectedDateKey] = useState<DateKey>(toDateKey(new Date()))
   const [subjects, setSubjects] = useState(initialSubjects)
   const [plannedAbsences, setPlannedAbsences] = useState(initialAbsences)
-  const [marks, setMarks] = useState<LocalMark>({})
+  const [marks, setMarks] = useState<AttendanceMarks>(initialMarks)
+  const [saveMessage, setSaveMessage] = useState('')
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const today = useMemo(() => new Date(), [])
   const selectedDate = dateKeyToDate(selectedDateKey)
   const dateCards = useMemo(
-    () => Array.from({ length: 15 }, (_, index) => addDays(today, index - 7)),
+    () => Array.from({ length: 100 }, (_, index) => addDays(today, index - 7)),
     [today]
   )
   const slots = classesFor(selectedDate, initialSettings)
@@ -166,45 +197,96 @@ export function TodayDashboard({
 
   const displayedName = email?.split('@')[0] ?? 'there'
 
+  useEffect(() => {
+    return () => {
+      if (syncTimer.current) {
+        clearTimeout(syncTimer.current)
+      }
+    }
+  }, [])
+
+  function queueSemesterSync(next: {
+    absences: PlannedAbsences
+    marks: AttendanceMarks
+    subjects: SubjectRecord[]
+  }) {
+    const snapshot = semesterCacheFromState({
+      absences: next.absences,
+      marks: next.marks,
+      settings: initialSettings,
+      subjects: next.subjects,
+    })
+
+    saveSemesterDataCache(currentSemester, snapshot)
+    setSaveMessage('Saved locally')
+
+    if (syncTimer.current) {
+      clearTimeout(syncTimer.current)
+    }
+
+    syncTimer.current = setTimeout(async () => {
+      setSaveMessage('Syncing...')
+      try {
+        const result = await syncCurrentSemesterSnapshot(snapshot)
+        setSaveMessage(result.message ?? '')
+      } catch {
+        setSaveMessage('Saved locally. Sync will retry on the next change.')
+      }
+    }, 1500)
+  }
+
   function markClass(slot: TimetableSlot, status: Extract<SessionStatus, 'attended' | 'missed'>) {
     const key = classKey(selectedDateKey, slot)
-    const previous = marks[key]
+    const previous = marks[key]?.status
     const next = previous === status ? 'pending' : status
+    const nextMarks: AttendanceMarks = {
+      ...marks,
+    }
 
-    setMarks((current) => ({
-      ...current,
-      [key]: next,
-    }))
-    setSubjects((current) =>
-      current.map((subject) =>
-        subject.name === slot.subject ? applyMark(subject, previous, next) : subject
-      )
-    )
-    setPlannedAbsences((current) => {
-      const planned = current[selectedDateKey] ?? []
-      const remaining = planned.filter((subject) => subject !== slot.subject)
-
-      return {
-        ...current,
-        [selectedDateKey]: remaining,
+    if (next === 'pending') {
+      delete nextMarks[key]
+    } else {
+      nextMarks[key] = {
+        date: selectedDateKey,
+        subject: slot.subject,
+        start: slot.time.start,
+        status: next,
       }
-    })
+    }
+    const nextAbsences: PlannedAbsences = {
+      ...plannedAbsences,
+    }
+    const nextSubjects = subjects.map((subject) =>
+      subject.name === slot.subject ? applyMark(subject, previous, next) : subject
+    )
+    const planned = plannedAbsences[selectedDateKey] ?? []
+    const remaining = planned.filter((subject) => subject !== slot.subject)
+
+    if (remaining.length > 0) {
+      nextAbsences[selectedDateKey] = remaining
+    } else {
+      delete nextAbsences[selectedDateKey]
+    }
+
+    setMarks(nextMarks)
+    setSubjects(nextSubjects)
+    setPlannedAbsences(nextAbsences)
+    queueSemesterSync({ absences: nextAbsences, marks: nextMarks, subjects: nextSubjects })
   }
 
   function toggleFullDayPlan() {
-    setPlannedAbsences((current) => {
-      if (fullDayPlanned) {
-        return {
-          ...current,
-          [selectedDateKey]: [],
-        }
-      }
+    const nextPlanned = !fullDayPlanned
+    const daySubjects = slots.map((slot) => slot.subject)
+    const nextAbsences = { ...plannedAbsences }
 
-      return {
-        ...current,
-        [selectedDateKey]: slots.map((slot) => slot.subject),
-      }
-    })
+    if (nextPlanned) {
+      nextAbsences[selectedDateKey] = daySubjects
+    } else {
+      delete nextAbsences[selectedDateKey]
+    }
+
+    setPlannedAbsences(nextAbsences)
+    queueSemesterSync({ absences: nextAbsences, marks, subjects })
   }
 
   return (
@@ -248,25 +330,31 @@ export function TodayDashboard({
         </div>
       </section>
 
-      <section className="grid gap-2 sm:grid-cols-[1fr_auto]">
-        <div
-          className={`flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 ${statusClass[safety.status]}`}
-        >
-          <CalendarDays className="size-4 shrink-0" />
-          <span className="shrink-0 font-medium">{statusText[safety.status]}</span>
-          <span className="truncate text-xs opacity-80">
-            {safetyMessage(safety.status, slots, safetySubjects)}
-          </span>
+      <section className="space-y-2">
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <div
+            className={`flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 ${statusClass[safety.status]}`}
+          >
+            <CalendarDays className="size-4 shrink-0" />
+            <span className="shrink-0 font-medium">{statusText[safety.status]}</span>
+            <span className="truncate text-xs opacity-80">
+              {safetyMessage(safety.status, slots, safetySubjects)}
+            </span>
+          </div>
+          <Button
+            disabled={slots.length === 0}
+            onClick={toggleFullDayPlan}
+            type="button"
+            variant={fullDayPlanned ? 'default' : 'outline'}
+          >
+            {fullDayPlanned ? 'Clear bunk' : 'Bunk today'}
+          </Button>
         </div>
-        <Button
-          disabled={slots.length === 0}
-          onClick={toggleFullDayPlan}
-          type="button"
-          variant={fullDayPlanned ? 'default' : 'outline'}
-        >
-          {fullDayPlanned ? 'Clear bunk' : 'Bunk today'}
-        </Button>
+        {safety.status === 'unsafe' ? (
+          <UnsafeSubjectImpacts subjects={safety.unsafeSubjectImpacts} />
+        ) : null}
       </section>
+      {saveMessage ? <p className="text-xs text-muted-foreground">{saveMessage}</p> : null}
 
       <section className="space-y-2">
         <div className="flex items-center justify-between border-b pb-2">
@@ -287,7 +375,7 @@ export function TodayDashboard({
           ) : (
             slots.map((slot) => {
               const key = classKey(selectedDateKey, slot)
-              const mark = marks[key]
+              const mark = marks[key]?.status
               const planned = isPlannedAbsent(selectedDate, slot.subject, plannedAbsences)
               const active = activeSlot?.subject === slot.subject && activeSlot.time.start === slot.time.start
               const subject = subjects.find((item) => item.name === slot.subject)
@@ -314,7 +402,7 @@ export function TodayDashboard({
                         </span>
                       ) : null}
                     </div>
-                    <p className="truncate text-xs text-muted-foreground">{slot.room ?? 'No room'}</p>
+                    {/* <p className="truncate text-xs text-muted-foreground">{slot.room ?? 'No room'}</p> */}
                   </div>
                   <div className="text-sm">{percent}%</div>
                   <div className="text-xs text-muted-foreground">{totalHeld} held</div>

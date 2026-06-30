@@ -1,11 +1,11 @@
 'use client'
 
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
-  confirmCurrentSemesterAbsences,
-} from '@/app/c/calendar/actions'
+  syncCurrentSemesterSnapshot,
+} from '@/app/c/actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +13,8 @@ import {
   cacheSemesterAbsences,
   readCurrentSemesterCache,
   readSemesterDataCache,
+  saveSemesterDataCache,
+  semesterCacheFromState,
 } from '@/lib/client/semester-cache'
 import {
   classesFor,
@@ -29,6 +31,7 @@ import type {
   AppSettings,
   DateKey,
   DaySafety,
+  DaySafetyResult,
   PlannedAbsences,
   SubjectRecord,
   TimetableSlot,
@@ -78,6 +81,62 @@ function monthDays(date: Date) {
 
 function formatTime(time: string) {
   return `${time.slice(0, 2)}:${time.slice(2, 4)}`
+}
+
+function absencesWithoutDate(absences: PlannedAbsences, dateKey: DateKey) {
+  const nextAbsences = { ...absences }
+
+  delete nextAbsences[dateKey]
+
+  return nextAbsences
+}
+
+function subjectThresholds(subjectName: string, subjects: SubjectRecord[], settings: AppSettings) {
+  const subject = subjects.find((item) => item.name === subjectName)
+
+  return {
+    minimum: subject?.minimumTarget ?? settings.minimumAttendance,
+    recommended: subject?.safetyTarget ?? settings.recommendedAttendance,
+  }
+}
+
+function percentageTone(
+  afterAttendance: number,
+  subjectName: string,
+  subjects: SubjectRecord[],
+  settings: AppSettings
+) {
+  const { minimum, recommended } = subjectThresholds(subjectName, subjects, settings)
+
+  if (afterAttendance < minimum) {
+    return 'text-red-700'
+  }
+
+  if (afterAttendance < recommended) {
+    return 'text-amber-700'
+  }
+
+  return 'text-emerald-700'
+}
+
+function selectedSafetyMessage(safety: DaySafetyResult, slots: TimetableSlot[]) {
+  const unsafeSubject = safety.unsafeSubjectImpacts[0]
+
+  if (unsafeSubject) {
+    return `${unsafeSubject.subject} is unsafe, percentage will drop from ${unsafeSubject.beforeAttendance.toFixed(1)}% to ${unsafeSubject.afterAttendance.toFixed(1)}% if skipped.`
+  }
+
+  const partialSubject = safety.partialSubjectImpacts[0]
+
+  if (partialSubject) {
+    return `${partialSubject.subject} will drop from ${partialSubject.beforeAttendance.toFixed(1)}% to ${partialSubject.afterAttendance.toFixed(1)}% if skipped.`
+  }
+
+  if (slots.length === 0) {
+    return 'No classes scheduled.'
+  }
+
+  return 'All subjects stay above the recommended target if skipped.'
 }
 
 function toggleSubject(dateKey: DateKey, slot: TimetableSlot, absences: PlannedAbsences) {
@@ -137,16 +196,13 @@ export function LeavesDashboard({
   const [rangeEnd, setRangeEnd] = useState(dateInputValue(addDays(today, 2)))
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('Ready')
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const selectedDate = dateKeyToDate(selectedDateKey)
   const selectedSlots = classesFor(selectedDate, settings)
-  const selectedSafety = predictedSafetyFor(
-    selectedDate,
-    initialSubjects,
-    settings,
-    plannedAbsences
-  )
-  const projectedSubjects = predictedSubjects(initialSubjects, plannedAbsences)
+  const selectedSafety = predictedSafetyFor(selectedDate, initialSubjects, settings, plannedAbsences)
+  const selectedAbsencesBeforeSkip = absencesWithoutDate(plannedAbsences, selectedDateKey)
+  const projectedSubjectsBeforeSkip = predictedSubjects(initialSubjects, selectedAbsencesBeforeSkip)
   const fullDayPlanned = isFullPlannedAbsence(selectedDate, settings, plannedAbsences)
   const impact = impactForRange(
     inputToDate(rangeStart),
@@ -169,17 +225,54 @@ export function LeavesDashboard({
     })
   }, [currentSemester])
 
-  function toggleFullDay() {
-    setPlannedAbsences((current) => {
-      if (fullDayPlanned) {
-        return { ...current, [selectedDateKey]: [] }
+  useEffect(() => {
+    return () => {
+      if (syncTimer.current) {
+        clearTimeout(syncTimer.current)
       }
+    }
+  }, [])
 
-      return {
-        ...current,
-        [selectedDateKey]: selectedSlots.map((slot) => slot.subject),
-      }
+  function toggleFullDay() {
+    const nextAbsences = { ...plannedAbsences }
+
+    if (fullDayPlanned) {
+      delete nextAbsences[selectedDateKey]
+    } else {
+      nextAbsences[selectedDateKey] = selectedSlots.map((slot) => slot.subject)
+    }
+
+    setAbsencesAndQueueSync(nextAbsences)
+  }
+
+  function semesterSnapshot(absences: PlannedAbsences) {
+    return semesterCacheFromState({
+      absences,
+      settings,
+      subjects: initialSubjects,
     })
+  }
+
+  function setAbsencesAndQueueSync(absences: PlannedAbsences) {
+    const snapshot = semesterSnapshot(absences)
+
+    setPlannedAbsences(absences)
+    saveSemesterDataCache(activeSemester, snapshot)
+    setSaveMessage('Saved locally')
+
+    if (syncTimer.current) {
+      clearTimeout(syncTimer.current)
+    }
+
+    syncTimer.current = setTimeout(async () => {
+      setSaveMessage('Syncing...')
+      try {
+        const result = await syncCurrentSemesterSnapshot(snapshot)
+        setSaveMessage(result.message ?? '')
+      } catch {
+        setSaveMessage('Saved locally. Sync will retry on the next change.')
+      }
+    }, 1500)
   }
 
   async function confirmLeave() {
@@ -190,12 +283,18 @@ export function LeavesDashboard({
     const nextAbsences = mergeAbsences(plannedAbsences, rangeAbsences)
     setPlannedAbsences(nextAbsences)
 
-    const result = await confirmCurrentSemesterAbsences(nextAbsences)
-    if (result.ok && result.semester) {
-      cacheSemesterAbsences(result.semester, nextAbsences, result.data)
-      setActiveSemester(result.semester)
+    const snapshot = semesterSnapshot(nextAbsences)
+    saveSemesterDataCache(activeSemester, snapshot)
+    try {
+      const result = await syncCurrentSemesterSnapshot(snapshot)
+      if (result.ok && result.semester) {
+        cacheSemesterAbsences(result.semester, nextAbsences, result.data)
+        setActiveSemester(result.semester)
+      }
+      setSaveMessage(result.message ?? '')
+    } catch {
+      setSaveMessage('Saved locally. Could not sync yet.')
     }
-    setSaveMessage(result.message)
     setIsSaving(false)
   }
 
@@ -285,9 +384,7 @@ export function LeavesDashboard({
             <CalendarDays className="size-4 shrink-0" />
             <span className="font-medium capitalize">{selectedSafety.status}</span>
             <span className="truncate text-xs opacity-80">
-              {selectedSlots.length === 0
-                ? 'No classes scheduled.'
-                : `${selectedSlots.length} classes on ${dateInputValue(selectedDate)}.`}
+              {selectedSafetyMessage(selectedSafety, selectedSlots)}
             </span>
           </div>
           <Button
@@ -299,7 +396,6 @@ export function LeavesDashboard({
             {fullDayPlanned ? 'Clear bunk' : 'Bunk today'}
           </Button>
         </div>
-
         <div className="space-y-2 overflow-x-auto">
           {selectedSlots.length === 0 ? (
             <p className="rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
@@ -308,30 +404,32 @@ export function LeavesDashboard({
           ) : (
             selectedSlots.map((slot) => {
               const planned = isPlannedAbsent(selectedDate, slot.subject, plannedAbsences)
+              const subject = projectedSubjectsBeforeSkip.find((item) => item.name === slot.subject)
+              const beforeAttendance = subject ? attendance(subject) : 100
+              const afterAttendance = subject ? attendance({ ...subject, missed: subject.missed + 1 }) : 100
+              const percentageClass = percentageTone(
+                afterAttendance,
+                slot.subject,
+                initialSubjects,
+                settings
+              )
 
               return (
                 <div
-                  className="grid min-w-[640px] grid-cols-[92px_1fr_78px_120px_auto] items-center gap-2 rounded-lg border px-2 py-2 text-sm"
+                  className="grid min-w-[640px] grid-cols-[92px_1fr_130px_auto] items-center gap-2 rounded-lg border px-2 py-2 text-sm"
                   key={`${selectedDateKey}-${slot.subject}-${slot.time.start}`}
                 >
                   <span className="text-xs text-muted-foreground">
                     {formatTime(slot.time.start)}-{formatTime(slot.time.end)}
                   </span>
                   <span className="font-medium">{slot.subject}</span>
-                  <span className="text-sm">
-                    {attendance(
-                      projectedSubjects.find((subject) => subject.name === slot.subject) ?? {
-                        name: slot.subject,
-                        attended: 0,
-                        missed: 0,
-                      }
-                    ).toFixed(1)}
-                    %
+                  <span className={`text-sm tabular-nums ${percentageClass}`}>
+                    {beforeAttendance.toFixed(1)}% {'->'} {afterAttendance.toFixed(1)}%
                   </span>
-                  <span className="truncate text-xs text-muted-foreground">{slot.room ?? 'No room'}</span>
+                  {/* <span className="truncate text-xs text-muted-foreground">{slot.room ?? 'No room'}</span> */}
                   <Button
                     onClick={() =>
-                      setPlannedAbsences((current) => toggleSubject(selectedDateKey, slot, current))
+                      setAbsencesAndQueueSync(toggleSubject(selectedDateKey, slot, plannedAbsences))
                     }
                     size="sm"
                     type="button"

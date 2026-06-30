@@ -19,7 +19,7 @@ BUNK is an attendance planner for students who need to track classes, plan absen
 ## Database Schema
 `
 Tables: 
-TIMETABLE: id: int8, creator: uuid of user, sem1, sem2, sem3 ... sem8: (json object)
+TIMETABLE: id: int8, user_id: uuid of user, sem1, sem2, sem3 ... sem8: (json object)
 
 each sem column should be like this: 
 start date: string "yyyymmdd"

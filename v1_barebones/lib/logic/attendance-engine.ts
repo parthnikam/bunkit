@@ -21,6 +21,7 @@ import type {
   BestSkipDay,
   DateKey,
   DaySafetyResult,
+  PlannerSubjectImpact,
   PlannedAbsences,
   PlannerImpact,
   SubjectRecord,
@@ -50,6 +51,9 @@ function safetyFromMisses(
   const records = subjectByName(subjects)
   const unsafeSubjects: string[] = []
   const partialSubjects: string[] = []
+  const subjectImpacts: PlannerSubjectImpact[] = []
+  const unsafeSubjectImpacts: PlannerSubjectImpact[] = []
+  const partialSubjectImpacts: PlannerSubjectImpact[] = []
 
   for (const [name, count] of Object.entries(misses)) {
     const current = records.get(name)
@@ -61,24 +65,55 @@ function safetyFromMisses(
     const projected = copyAfterMisses(current, count)
     const minimum = current.minimumTarget ?? settings.minimumAttendance
     const recommended = current.safetyTarget ?? settings.recommendedAttendance
+    const beforeAttendance = attendance(current)
     const projectedAttendance = attendance(projected)
+    const impact = {
+      subject: name,
+      plannedMisses: count,
+      beforeAttendance,
+      afterAttendance: projectedAttendance,
+    }
+    subjectImpacts.push(impact)
 
     if (projectedAttendance < minimum) {
       unsafeSubjects.push(name)
+      unsafeSubjectImpacts.push(impact)
     } else if (projectedAttendance < recommended) {
       partialSubjects.push(name)
+      partialSubjectImpacts.push(impact)
     }
   }
 
   if (unsafeSubjects.length > 0) {
-    return { status: 'unsafe', unsafeSubjects, partialSubjects }
+    return {
+      status: 'unsafe',
+      unsafeSubjects,
+      partialSubjects,
+      subjectImpacts,
+      unsafeSubjectImpacts,
+      partialSubjectImpacts,
+    }
   }
 
   if (partialSubjects.length > 0) {
-    return { status: 'partial', unsafeSubjects, partialSubjects }
+    return {
+      status: 'partial',
+      unsafeSubjects,
+      partialSubjects,
+      subjectImpacts,
+      unsafeSubjectImpacts,
+      partialSubjectImpacts,
+    }
   }
 
-  return { status: 'safe', unsafeSubjects, partialSubjects }
+  return {
+    status: 'safe',
+    unsafeSubjects,
+    partialSubjects,
+    subjectImpacts,
+    unsafeSubjectImpacts,
+    partialSubjectImpacts,
+  }
 }
 
 export function classesFor(date: Date, settings: AppSettings): TimetableSlot[] {
@@ -112,7 +147,14 @@ export function safetyFor(
   const slots = classesFor(date, settings)
 
   if (slots.length === 0) {
-    return { status: 'holiday', unsafeSubjects: [], partialSubjects: [] }
+    return {
+      status: 'holiday',
+      unsafeSubjects: [],
+      partialSubjects: [],
+      subjectImpacts: [],
+      unsafeSubjectImpacts: [],
+      partialSubjectImpacts: [],
+    }
   }
 
   return safetyFromMisses(subjects, countSubjects(slots), settings)
@@ -146,10 +188,24 @@ export function predictedSafetyFor(
   const slots = classesFor(date, settings)
 
   if (slots.length === 0) {
-    return { status: 'holiday', unsafeSubjects: [], partialSubjects: [] }
+    return {
+      status: 'holiday',
+      unsafeSubjects: [],
+      partialSubjects: [],
+      subjectImpacts: [],
+      unsafeSubjectImpacts: [],
+      partialSubjectImpacts: [],
+    }
   }
 
-  return safetyFromMisses(predictedSubjects(subjects, absences), countSubjects(slots), settings)
+  const absencesBeforeDateSkip = { ...absences }
+  delete absencesBeforeDateSkip[toDateKey(date)]
+
+  return safetyFromMisses(
+    predictedSubjects(subjects, absencesBeforeDateSkip),
+    countSubjects(slots),
+    settings
+  )
 }
 
 export function isPlannedAbsent(

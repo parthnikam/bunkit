@@ -1,10 +1,17 @@
 'use client'
 
-import type { PlannedAbsences } from '@/lib/models/attendance'
+import type {
+  AppSettings,
+  AttendanceMarks,
+  PlannedAbsences,
+  SubjectRecord,
+} from '@/lib/models/attendance'
 import { isSemesterColumn, type SemesterColumn } from '@/lib/models/semester'
 
 export type CachedSemesterData = Record<string, unknown> & {
   absences?: PlannedAbsences
+  marks?: AttendanceMarks
+  subjects?: SubjectRecord[]
 }
 
 const currentSemesterKey = 'bunk.current_sem'
@@ -76,4 +83,29 @@ export function cacheSemesterAbsences(
     ...(data ?? {}),
     absences,
   })
+}
+
+export function semesterCacheFromState({
+  absences,
+  marks,
+  settings,
+  subjects,
+}: {
+  absences: PlannedAbsences
+  marks?: AttendanceMarks
+  settings: AppSettings
+  subjects: SubjectRecord[]
+}): CachedSemesterData {
+  return {
+    start_date: settings.semesterStart,
+    end_date: settings.semesterEnd,
+    minimum_attendance: settings.minimumAttendance,
+    recommended_attendance: settings.recommendedAttendance,
+    holidays: settings.holidays ?? [],
+    holiday_ranges: settings.holidayRanges ?? [],
+    timetable: settings.timetable,
+    absences,
+    marks: marks ?? {},
+    subjects,
+  }
 }

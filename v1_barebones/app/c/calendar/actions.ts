@@ -39,7 +39,7 @@ export async function confirmCurrentSemesterAbsences(absences: PlannedAbsences) 
   const { data: existing, error: lookupError } = await supabase
     .from('TIMETABLE')
     .select('id, current_sem, sem1, sem2, sem3, sem4, sem5, sem6, sem7, sem8')
-    .eq('creator', userData.user.id)
+    .eq('user_id', userData.user.id)
     .maybeSingle()
 
   if (lookupError) {
@@ -54,7 +54,7 @@ export async function confirmCurrentSemesterAbsences(absences: PlannedAbsences) 
     absences: mergeAbsences(currentSemester.absences, absences),
   }
   const payload = {
-    creator: userData.user.id,
+    user_id: userData.user.id,
     [semester]: nextSemester,
   }
 

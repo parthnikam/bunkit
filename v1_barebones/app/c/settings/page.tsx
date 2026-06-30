@@ -9,6 +9,7 @@ type StoredSemesterSettings = {
   minimum_attendance?: number
   recommended_attendance?: number
   holidays?: DateKey[]
+  holiday_ranges?: { start: DateKey; end: DateKey }[]
   timetable?: AppSettings['timetable']
 }
 
@@ -18,6 +19,7 @@ const fallbackSettings: AppSettings = {
   minimumAttendance: 75,
   recommendedAttendance: 80,
   holidays: [],
+  holidayRanges: [],
   timetable: {
     monday: [],
     tuesday: [],
@@ -34,6 +36,7 @@ function normalizeSettings(stored?: StoredSemesterSettings | null): AppSettings 
     minimumAttendance: stored?.minimum_attendance ?? fallbackSettings.minimumAttendance,
     recommendedAttendance: stored?.recommended_attendance ?? fallbackSettings.recommendedAttendance,
     holidays: stored?.holidays ?? fallbackSettings.holidays,
+    holidayRanges: stored?.holiday_ranges ?? fallbackSettings.holidayRanges,
     timetable: stored?.timetable ?? fallbackSettings.timetable,
   }
 }
@@ -45,7 +48,7 @@ export default async function SettingsPage() {
     ? await supabase
         .from('TIMETABLE')
         .select('current_sem, sem1, sem2, sem3, sem4, sem5, sem6, sem7, sem8')
-        .eq('creator', userData.user.id)
+        .eq('user_id', userData.user.id)
         .maybeSingle()
     : { data: null }
 
