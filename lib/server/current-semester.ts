@@ -26,6 +26,7 @@ type StoredSemesterSettings = {
 export type CurrentSemesterData = {
   absences: PlannedAbsences
   currentSemester: SemesterColumn
+  hasTimetableInfo: boolean
   settings: AppSettings
   marks: AttendanceMarks
   subjects: SubjectRecord[]
@@ -87,6 +88,12 @@ function subjectsFromTimetable(timetable: WeeklyTimetable, storedSubjects: Subje
   return subjects
 }
 
+export function hasTimetableInfo(timetable: WeeklyTimetable): boolean {
+  return Object.values(timetable).some((slots) =>
+    (slots ?? []).some((slot) => slot.subject.trim().length > 0)
+  )
+}
+
 export async function getCurrentSemesterData(): Promise<CurrentSemesterData> {
   const supabase = await createClient()
   const { data: userData } = await supabase.auth.getUser()
@@ -95,6 +102,7 @@ export async function getCurrentSemesterData(): Promise<CurrentSemesterData> {
     return {
       absences: {},
       currentSemester: 'sem1',
+      hasTimetableInfo: false,
       marks: {},
       settings: fallbackSettings,
       subjects: [],
@@ -119,6 +127,7 @@ export async function getCurrentSemesterData(): Promise<CurrentSemesterData> {
   return {
     absences: stored?.absences ?? {},
     currentSemester,
+    hasTimetableInfo: hasTimetableInfo(settings.timetable),
     marks: stored?.marks ?? {},
     settings,
     subjects,

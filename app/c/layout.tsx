@@ -34,14 +34,14 @@ export default async function PageLayout({ children }: { children: React.ReactNo
         </nav>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-5xl pb-24 md:pb-0">{children}</div>
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-10 flex h-16 items-center justify-around border-t border-border bg-background/95 px-2 text-xs backdrop-blur md:hidden">
         {navItems.map((item) => (
           <Link
-            className="rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="flex-1 rounded-lg px-1 py-2 text-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             href={item.href}
             key={item.href}
           >

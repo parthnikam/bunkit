@@ -331,7 +331,7 @@ export function SettingsForm({ initialSemester, initialSettings }: SettingsFormP
         <div className="space-y-2 overflow-x-auto">
           {holidayRanges.map((range) => (
             <div
-              className="grid min-w-[520px] grid-cols-[64px_1fr_44px_1fr_auto] items-center gap-2"
+              className="grid grid-cols-[56px_1fr_auto] items-center gap-2 md:min-w-[520px] md:grid-cols-[64px_1fr_44px_1fr_auto]"
               key={range.id}
             >
               <Label className="text-xs text-muted-foreground" htmlFor={fieldId('range-start', range.id)}>
@@ -353,6 +353,7 @@ export function SettingsForm({ initialSemester, initialSettings }: SettingsFormP
                 to
               </Label>
               <Input
+                className="col-start-2 md:col-start-auto"
                 id={fieldId('range-end', range.id)}
                 onChange={(event) =>
                   setHolidayRanges((current) =>
@@ -366,6 +367,7 @@ export function SettingsForm({ initialSemester, initialSettings }: SettingsFormP
               />
               <Button
                 aria-label="Remove holiday range"
+                className="row-span-2 md:row-span-1"
                 onClick={() => removeHolidayRange(range.id)}
                 size="icon-sm"
                 type="button"
@@ -405,7 +407,7 @@ export function SettingsForm({ initialSemester, initialSettings }: SettingsFormP
                 ) : (
                   slotsByWeekday[weekday].map((slot) => (
                     <div
-                      className="grid min-w-[680px] grid-cols-[1.2fr_104px_104px_1fr_auto] items-center gap-2 rounded-lg border px-2 py-2"
+                      className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 rounded-lg border px-2 py-2 md:min-w-[680px] md:grid-cols-[1.2fr_104px_104px_1fr_auto]"
                       key={slot.id}
                     >
                       <InlineInput
@@ -414,6 +416,7 @@ export function SettingsForm({ initialSemester, initialSettings }: SettingsFormP
                         onChange={(value) => updateSlot(slot.id, { subject: value })}
                         placeholder="MATH"
                         value={slot.subject}
+                        wrapperClassName="col-span-2 md:col-span-1"
                       />
                       <Input
                         aria-label="Start time"
@@ -433,9 +436,11 @@ export function SettingsForm({ initialSemester, initialSettings }: SettingsFormP
                         onChange={(value) => updateSlot(slot.id, { room: value })}
                         placeholder="A-101"
                         value={slot.room}
+                        wrapperClassName="col-span-2 md:col-span-1"
                       />
                       <Button
                         aria-label="Remove class"
+                        className="row-span-2 md:row-span-1"
                         onClick={() => removeSlot(slot.id)}
                         size="icon-sm"
                         type="button"
@@ -549,14 +554,16 @@ function InlineInput({
   label,
   onChange,
   value,
+  wrapperClassName,
   ...props
 }: Omit<ComponentProps<typeof Input>, 'onChange' | 'value'> & {
   label: string
   onChange: (value: string) => void
   value: string
+  wrapperClassName?: string
 }) {
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
+    <div className={`flex min-w-0 flex-1 items-center gap-2 ${wrapperClassName ?? ''}`}>
       <Label className="w-16 shrink-0 text-xs text-muted-foreground" htmlFor={id}>
         {label}
       </Label>

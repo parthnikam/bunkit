@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -23,19 +23,20 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const nextPath = searchParams.get('next') || '/c'
 
   const handleGoogleLogin = async () => {
+    const siteURL = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
     const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
     try {
-      const siteURL = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
-
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${siteURL}/auth/callback?next=/c`,
+          redirectTo: `${siteURL}/auth/callback?next=${encodeURIComponent(nextPath)}`,
         },
       })
       if (error) throw error
@@ -57,8 +58,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
         password,
       })
       if (error) throw error
-      // Update this route to redirect to an authenticated route. The user already has an active session.
-      router.push('/c')
+      router.push(nextPath)
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {

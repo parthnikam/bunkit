@@ -342,6 +342,7 @@ export function TodayDashboard({
             </span>
           </div>
           <Button
+            className="w-full sm:w-auto"
             disabled={slots.length === 0}
             onClick={toggleFullDayPlan}
             type="button"
@@ -385,7 +386,7 @@ export function TodayDashboard({
               return (
                 <div
                   className={[
-                    'grid min-w-[720px] grid-cols-[82px_1fr_92px_110px_88px_88px] items-center gap-2 rounded-lg border px-2 py-2',
+                    'grid grid-cols-[76px_1fr] items-center gap-2 rounded-lg border px-2 py-2 md:min-w-[720px] md:grid-cols-[82px_1fr_92px_110px_88px_88px]',
                     active ? 'border-primary' : 'border-border',
                   ].join(' ')}
                   key={key}
@@ -404,9 +405,12 @@ export function TodayDashboard({
                     </div>
                     {/* <p className="truncate text-xs text-muted-foreground">{slot.room ?? 'No room'}</p> */}
                   </div>
-                  <div className="text-sm">{percent}%</div>
-                  <div className="text-xs text-muted-foreground">{totalHeld} held</div>
+                  <div className="text-xs text-muted-foreground md:text-sm md:text-foreground">{percent}%</div>
+                  <div className="text-right text-xs text-muted-foreground md:text-left">
+                    {totalHeld} held
+                  </div>
                   <Button
+                    className="w-full"
                     onClick={() => markClass(slot, 'attended')}
                     size="sm"
                     type="button"
@@ -416,6 +420,7 @@ export function TodayDashboard({
                     Attend
                   </Button>
                   <Button
+                    className="w-full"
                     onClick={() => markClass(slot, 'missed')}
                     size="sm"
                     type="button"

@@ -388,6 +388,7 @@ export function LeavesDashboard({
             </span>
           </div>
           <Button
+            className="w-full sm:w-auto"
             disabled={selectedSlots.length === 0}
             onClick={toggleFullDay}
             type="button"
@@ -416,18 +417,19 @@ export function LeavesDashboard({
 
               return (
                 <div
-                  className="grid min-w-[640px] grid-cols-[92px_1fr_130px_auto] items-center gap-2 rounded-lg border px-2 py-2 text-sm"
+                  className="grid grid-cols-[86px_1fr] items-center gap-2 rounded-lg border px-2 py-2 text-sm md:min-w-[640px] md:grid-cols-[92px_1fr_130px_auto]"
                   key={`${selectedDateKey}-${slot.subject}-${slot.time.start}`}
                 >
                   <span className="text-xs text-muted-foreground">
                     {formatTime(slot.time.start)}-{formatTime(slot.time.end)}
                   </span>
                   <span className="font-medium">{slot.subject}</span>
-                  <span className={`text-sm tabular-nums ${percentageClass}`}>
+                  <span className={`text-xs tabular-nums md:text-sm ${percentageClass}`}>
                     {beforeAttendance.toFixed(1)}% {'->'} {afterAttendance.toFixed(1)}%
                   </span>
                   {/* <span className="truncate text-xs text-muted-foreground">{slot.room ?? 'No room'}</span> */}
                   <Button
+                    className="w-full md:w-auto"
                     onClick={() =>
                       setAbsencesAndQueueSync(toggleSubject(selectedDateKey, slot, plannedAbsences))
                     }
@@ -452,7 +454,7 @@ export function LeavesDashboard({
               {impact.safety}
             </span>
           </div>
-          <Button disabled={isSaving} onClick={confirmLeave} size="sm" type="button">
+          <Button className="shrink-0" disabled={isSaving} onClick={confirmLeave} size="sm" type="button">
             {isSaving ? 'Saving' : 'Confirm leave'}
           </Button>
         </div>
@@ -484,7 +486,7 @@ export function LeavesDashboard({
 
         <div className="overflow-x-auto">
           <div className="space-y-2">
-            <div className="grid min-w-[520px] grid-cols-[1fr_90px_120px_120px] gap-2 border-b pb-2 text-xs text-muted-foreground">
+            <div className="grid grid-cols-[1fr_56px_72px_72px] gap-2 border-b pb-2 text-xs text-muted-foreground md:min-w-[520px] md:grid-cols-[1fr_90px_120px_120px]">
               <span>Subject</span>
               <span>Misses</span>
               <span>Before</span>
@@ -494,10 +496,10 @@ export function LeavesDashboard({
               .filter((subject) => subject.plannedMisses > 0)
               .map((subject) => (
                 <div
-                  className="grid min-w-[520px] grid-cols-[1fr_90px_120px_120px] gap-2 rounded-lg border px-2 py-2 text-sm"
+                  className="grid grid-cols-[1fr_56px_72px_72px] gap-2 rounded-lg border px-2 py-2 text-xs md:min-w-[520px] md:grid-cols-[1fr_90px_120px_120px] md:text-sm"
                   key={subject.subject}
                 >
-                  <span className="font-medium">{subject.subject}</span>
+                  <span className="min-w-0 truncate font-medium">{subject.subject}</span>
                   <span>{subject.plannedMisses}</span>
                   <span>{subject.beforeAttendance.toFixed(1)}%</span>
                   <span>{subject.afterAttendance.toFixed(1)}%</span>

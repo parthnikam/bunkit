@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -24,6 +24,8 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const nextPath = searchParams.get('next') || '/c'
 
   const handleGoogleSignUp = async () => {
     const supabase = createClient()
@@ -36,7 +38,7 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${siteURL}/auth/callback?next=/c`,
+          redirectTo: `${siteURL}/auth/callback?next=${encodeURIComponent(nextPath)}`,
         },
       })
       if (error) throw error
@@ -64,7 +66,7 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
         email,
         password,
         options: {
-          emailRedirectTo: `${siteURL}/auth/confirm?next=/c`,
+          emailRedirectTo: `${siteURL}/auth/confirm?next=${encodeURIComponent(nextPath)}`,
         },
       })
       if (error) throw error

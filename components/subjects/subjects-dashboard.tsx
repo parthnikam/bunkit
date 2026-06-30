@@ -126,7 +126,50 @@ export function SubjectsDashboard({
         </section>
       ) : null}
 
-      <section className="overflow-x-auto">
+      <section className="space-y-2 md:hidden">
+        {projectedSubjects.map((subject) => {
+          const percent = attendance(subject)
+          const minimum = subject.minimumTarget ?? settings.minimumAttendance
+          const recommended = subject.safetyTarget ?? settings.recommendedAttendance
+          const status = statusFor(percent, minimum, recommended)
+          const plannedMisses = plannedCounts[subject.name] ?? 0
+
+          return (
+            <button
+              className={[
+                'w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                selectedSubject === subject.name ? 'border-primary' : 'border-border',
+              ].join(' ')}
+              key={subject.name}
+              onClick={() => setSelectedSubject(subject.name)}
+              type="button"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate font-medium">{subject.name}</span>
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${status.className}`}>
+                  {status.label}
+                </span>
+              </div>
+              <div className="mt-1 grid grid-cols-4 gap-2 text-xs text-muted-foreground">
+                <span>{percent.toFixed(1)}%</span>
+                <span>{subject.missed}/{held(subject)}</span>
+                <span>
+                  {formatNumber(
+                    remainingSkipsForSemester(
+                      subject.missed,
+                      subject.totalClasses ?? 0,
+                      settings.minimumAttendance
+                    )
+                  )} left
+                </span>
+                <span>{plannedMisses} plan</span>
+              </div>
+            </button>
+          )
+        })}
+      </section>
+
+      <section className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[760px] table-fixed border-separate border-spacing-y-2 text-sm">
           <thead>
             <tr className="text-xs text-muted-foreground">
